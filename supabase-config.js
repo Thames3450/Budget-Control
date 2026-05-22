@@ -1,0 +1,4 @@
+window.BUDGET_APP_CONFIG = {
+  supabaseUrl: "https://ldbaclsvnbquvvcxoctk.supabase.co",
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxkYmFjbHN2bmJxdXZ2Y3hvY3RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NTk2MzAsImV4cCI6MjA5NTAzNTYzMH0.EvxHcbYhkG8H7dMxFAHxVA0Wfo4M8_aWAn-yKbu0NAc"
+};
