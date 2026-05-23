@@ -3,41 +3,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MPR Budget Control</title>
+  <title>MPR Budget | Supabase Budget Control</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
+
   <link rel="stylesheet" href="style.css" />
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="supabase-config.js"></script>
 </head>
+
 <body>
   <div id="toast" class="toast"></div>
-  <div id="loadingOverlay" class="loading-overlay"><div class="loader"></div><p>Loading Supabase data...</p></div>
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="loader-card">
+      <div class="loader"></div>
+      <strong>กำลังประมวลผล...</strong>
+      <span>กำลังบันทึก/ดึงข้อมูลจาก Supabase</span>
+    </div>
+  </div>
 
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand-block">
         <div class="brand-logo">¥</div>
-        <div>
+        <div class="brand-text">
           <h1>MPR Budget</h1>
           <p>Supabase Budget Control</p>
         </div>
       </div>
 
-      <div class="connection-card" id="connectionCard">
-        <span class="dot"></span>
-        <div>
-          <b id="connectionStatus">Checking...</b>
-          <small>Full backend mode</small>
+      <div class="sidebar-status" id="connectionCard">
+        <div class="status-line">
+          <span class="dot"></span>
+          <strong id="connectionStatus">Checking...</strong>
         </div>
+        <small id="connectionMode">Full backend mode</small>
       </div>
 
       <div class="sidebar-month">
         <span>Selected Month</span>
         <strong id="sideMonth">-</strong>
-        <small id="sideBudget">0 CNY</small>
+        <small id="sideBudget">0.00 CNY</small>
+        <small id="sideBudgetThb">≈ 0.00 THB</small>
       </div>
 
       <nav class="sidebar-nav">
@@ -65,141 +76,450 @@
       <header class="topbar">
         <div>
           <p class="eyebrow">MVR / MSR SPARE PARTS BUDGET</p>
-          <h3>Budget Control System</h3>
-          <p class="sub-title">ระบบจัดการงบสั่งซื้ออะไหล่แบบเชื่อม Supabase เต็มระบบ บันทึกงบย่อย รายการสั่งซื้อ และประวัติโยกงบถาวร</p>
+          <h2>Monthly Order Planning</h2>
+          <p class="sub-title">จัดการงบสั่งซื้ออะไหล่แบบ Supabase เต็มระบบ เพิ่ม/ลบ/แก้ไขงบและประวัติรายเดือนได้ถาวร</p>
         </div>
+
         <div class="topbar-actions">
-          <select id="globalMonthSelect" class="month-select"></select>
-          <button class="btn btn-primary" id="openManualModalBtn">+ Add Order</button>
+          <button class="btn btn-primary" id="openManualModalBtn">+ Add Manual Order</button>
           <button class="btn btn-outline" id="openTransferModalBtn">Transfer Budget</button>
+          <button class="btn btn-white nav-shortcut" data-target-page="filePage">File Center</button>
         </div>
       </header>
 
-      <section id="dashboardPage" class="page active">
-        <section class="workflow-strip compact">
-          <article class="workflow-card primary"><span>01</span><strong>Set Budget</strong></article>
-          <article class="workflow-card"><span>02</span><strong>Add Orders</strong></article>
-          <article class="workflow-card"><span>03</span><strong>Control</strong></article>
-          <article class="workflow-card"><span>04</span><strong>Export</strong></article>
-        </section>
+      <section class="workflow-strip">
+        <article class="workflow-card primary"><span>01</span><strong>Set Budget</strong></article>
+        <article class="workflow-card"><span>02</span><strong>Add Orders</strong></article>
+        <article class="workflow-card"><span>03</span><strong>Control Spending</strong></article>
+        <article class="workflow-card"><span>04</span><strong>Export Report</strong></article>
+      </section>
 
-        <div class="kpi-grid">
-          <article class="kpi-card"><span>Total Available</span><strong id="kpiMonthlyBudget">0 CNY</strong><small>Base + rollover + transfer</small></article>
-          <article class="kpi-card"><span>Used Budget</span><strong id="kpiUsedBudget">0 CNY</strong><small>Confirmed order total</small></article>
-          <article class="kpi-card accent"><span>Remaining Budget</span><strong id="kpiRemainBudget">0 CNY</strong><small>Available for allocation</small></article>
-          <article class="kpi-card status" id="budgetAlertCard"><span>Budget Status</span><strong id="kpiBudgetStatus">Normal</strong><small id="kpiBudgetMessage">Ready</small></article>
+      <!-- DASHBOARD -->
+      <section id="dashboardPage" class="page active">
+        <div class="page-title-row">
+          <div>
+            <h3>Budget Control Dashboard</h3>
+            <p>ภาพรวมงบรวม ใช้ไป คงเหลือ และงบที่ต้องตรวจสอบ</p>
+          </div>
+          <div class="month-switcher">
+            <label>
+              <span>Month</span>
+              <select id="dashboardMonthSelect"></select>
+            </label>
+          </div>
         </div>
 
-        <div class="dashboard-grid">
-          <section class="panel">
-            <div class="panel-head"><div><h3>Budget Health</h3><p>ภาพรวมการใช้งบของเดือนที่เลือก</p></div></div>
-            <div class="meter-card">
-              <div class="meter-top"><span>Usage</span><strong id="usagePercent">0%</strong></div>
-              <div class="meter-track"><div id="usageBar" class="meter-fill"></div></div>
-              <div class="meter-info"><span id="meterUsed">Used: 0 CNY</span><span id="meterRemain">Remain: 0 CNY</span></div>
-            </div>
-          </section>
-          <section class="panel">
-            <div class="panel-head"><div><h3>Order Summary</h3><p>สรุปสถานะรายการสั่งซื้อ</p></div></div>
-            <div class="summary-stack">
-              <div class="summary-row"><span>Total Items</span><strong id="sumItems">0</strong></div>
-              <div class="summary-row"><span>Completed</span><strong id="sumCompleted">0</strong></div>
-              <div class="summary-row"><span>Partial / Carry</span><strong id="sumPartial">0</strong></div>
-              <div class="summary-row"><span>Need Attention</span><strong id="sumCarry">0</strong></div>
-            </div>
-          </section>
+        <div class="kpi-grid">
+          <article class="kpi-card">
+            <span>Total Available</span>
+            <strong id="kpiTotalBudget">0.00 CNY</strong>
+            <small id="kpiTotalBudgetThb">≈ 0.00 THB</small>
+          </article>
+          <article class="kpi-card">
+            <span>Used</span>
+            <strong id="kpiUsedBudget">0.00 CNY</strong>
+            <small id="kpiUsedBudgetThb">≈ 0.00 THB</small>
+          </article>
+          <article class="kpi-card accent">
+            <span>Remaining</span>
+            <strong id="kpiRemainBudget">0.00 CNY</strong>
+            <small id="kpiRemainBudgetThb">≈ 0.00 THB</small>
+          </article>
+          <article class="kpi-card status" id="kpiStatusCard">
+            <span>Budget Status</span>
+            <strong id="kpiStatus">Normal</strong>
+            <small id="kpiStatusMessage">งบยังเพียงพอ</small>
+          </article>
         </div>
 
         <section class="panel">
-          <div class="panel-head"><div><h3>Budget Allocation Overview</h3><p>งบแต่ละก้อนเหลือเท่าไหร่ ใช้ไปเท่าไหร่ และควรโยกงบไหม</p></div></div>
+          <div class="panel-head">
+            <div>
+              <h3>Budget Allocation Overview</h3>
+              <p>เห็นงบแต่ละก้อนว่าเหลือเท่าไหร่ ใช้ไปเท่าไหร่ และควรจัดสรรอย่างไร</p>
+            </div>
+          </div>
           <div id="budgetAllocationGrid" class="budget-allocation-grid"></div>
         </section>
 
         <section class="panel">
-          <div class="panel-head"><div><h3>Budget Attention Required</h3><p>งบที่ใกล้หมด เกินงบ หรือควรตรวจสอบก่อนอนุมัติ</p></div></div>
-          <div id="budgetAttentionList" class="attention-list"></div>
+          <div class="panel-head">
+            <div>
+              <h3>Budget Attention Required</h3>
+              <p>งบที่ใกล้หมด เกินงบ หรือต้องรีบจัดการ</p>
+            </div>
+          </div>
+          <div id="attentionList" class="attention-list"></div>
         </section>
 
-        <section class="panel">
-          <div class="panel-head"><div><h3>Top Spending Items</h3><p>รายการที่ใช้เงินสูงสุดในเดือนนี้</p></div></div>
-          <div class="table-wrap compact"><table><thead><tr><th>No.</th><th>Part</th><th>Model</th><th>Budget</th><th>Order Qty</th><th>Unit Price</th><th>Total</th><th>Status</th></tr></thead><tbody id="topSpendingBody"></tbody></table></div>
+        <section class="panel two-col-panel">
+          <div>
+            <div class="panel-head">
+              <div>
+                <h3>Top Spending Items</h3>
+                <p>รายการใช้เงินสูงสุดของเดือน</p>
+              </div>
+            </div>
+            <div id="topSpendingList" class="compact-list"></div>
+          </div>
+
+          <div>
+            <div class="panel-head">
+              <div>
+                <h3>Recent Transfers</h3>
+                <p>ประวัติโยกงบล่าสุด</p>
+              </div>
+            </div>
+            <div id="recentTransferList" class="compact-list"></div>
+          </div>
         </section>
       </section>
 
+      <!-- MONTHLY BUDGET -->
       <section id="budgetPage" class="page">
+        <div class="page-title-row">
+          <div>
+            <h3>Monthly Budget Workspace</h3>
+            <p>จัดการงบเดือนนี้ แก้ไข Base Budget เพิ่ม/ลบงบย่อย และคุมยอดรวมให้ถูกต้อง</p>
+          </div>
+        </div>
+
         <section class="panel">
-          <div class="panel-head with-actions"><div><h3>Monthly Budget Workspace</h3><p>สร้างงบรายเดือน จัดสรรงบย่อย เพิ่ม/ลบ/แก้ไขงบ และคำนวณ rollover</p></div><button class="btn btn-primary" id="openBucketModalBtn">+ Add Sub Budget</button></div>
           <form id="monthForm" class="month-form">
-            <label><span>Budget Month</span><input id="monthInput" type="month" required></label>
-            <label><span>Total Base Budget CNY</span><input id="totalBudgetInput" type="number" min="0" step="0.01" value="80000"></label>
-            <label><span>CNY to THB Rate</span><input id="cnyToThbInput" type="number" min="0" step="0.0001" value="5"></label>
-            <label class="checkbox-label"><input id="rolloverToggle" type="checkbox" checked><span>Rollover from previous month</span></label>
-            <button class="btn btn-primary" type="submit">Create / Update Month</button>
+            <label>
+              <span>Budget Month</span>
+              <input id="monthInput" type="month" required>
+            </label>
+            <label>
+              <span>CNY → THB Rate</span>
+              <input id="cnyToThbInput" type="number" min="0" step="0.0001" value="5">
+            </label>
+            <label class="checkbox-label">
+              <input id="rolloverToggle" type="checkbox" checked>
+              <span>Recalculate rollover</span>
+            </label>
+            <button type="submit" class="btn btn-primary">Create / Update Month</button>
           </form>
-          <div class="budget-summary-strip" id="budgetSummaryStrip"></div>
+
+          <div class="budget-summary-strip">
+            <div><span>Total Available</span><strong id="sumTotalAvailable">0.00 CNY</strong></div>
+            <div><span>Used</span><strong id="sumUsed">0.00 CNY</strong></div>
+            <div><span>Remaining</span><strong id="sumRemaining">0.00 CNY</strong></div>
+            <div><span>Budget Buckets</span><strong id="sumBuckets">0</strong></div>
+          </div>
+
           <div class="toolbar-inline">
+            <button class="btn btn-primary" id="openBucketModalBtn">+ Add Budget Bucket</button>
             <button class="btn btn-soft" id="recalcRolloverBtn">Recalculate Rollover</button>
-            <button class="btn btn-danger-soft" id="resetMonthBudgetBtn">Reset Selected Month</button>
+            <button class="btn btn-danger-soft" id="resetMonthBtn">Reset Selected Month</button>
+            <span class="toolbar-note">แก้ไข Base Budget ในตารางได้โดยตรง ระบบจะบันทึกลง Supabase และคำนวณยอดรวมใหม่ทันที</span>
           </div>
-          <div class="table-wrap"><table><thead><tr><th>Budget Code</th><th>Group</th><th>Owner</th><th>Department</th><th>Base Budget</th><th>Rollover</th><th>Transfer In</th><th>Transfer Out</th><th>Total</th><th>Used</th><th>Remaining</th><th>Usage</th><th>Status</th><th>Action</th></tr></thead><tbody id="monthBudgetBody"></tbody></table></div>
+
+          <div class="table-wrap budget-table-wrap">
+            <table class="budget-table">
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th>Budget Code</th>
+                  <th>Group</th>
+                  <th>Owner</th>
+                  <th>Dept</th>
+                  <th>Base Budget</th>
+                  <th>Rollover</th>
+                  <th>Transfer In</th>
+                  <th>Transfer Out</th>
+                  <th>Total</th>
+                  <th>Used</th>
+                  <th>Remaining</th>
+                  <th>Usage</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="monthBudgetBody"></tbody>
+            </table>
+          </div>
         </section>
       </section>
 
+      <!-- PLANNING -->
       <section id="planningPage" class="page">
+        <div class="page-title-row">
+          <div>
+            <h3>Order Planning Console</h3>
+            <p>วางแผนจำนวนสั่งซื้อให้พอดีกับงบ และแก้ Order Qty แล้วบันทึก Supabase ทันที</p>
+          </div>
+          <div class="mini-stats">
+            <div><span>Items</span><strong id="planItemCount">0</strong></div>
+            <div><span>Planned Total</span><strong id="planTotalCny">0.00 CNY</strong></div>
+            <div><span>Carry Items</span><strong id="planCarryCount">0</strong></div>
+          </div>
+        </div>
+
         <section class="panel">
-          <div class="panel-head"><div><h3>Order Planning Console</h3><p>ปรับ Order Qty และ Budget Code โดยบันทึกลง Supabase ทันที</p></div><div class="quick-stats"><span id="planItemsStat">0 items</span><span id="planTotalStat">0 CNY</span></div></div>
-          <div class="filters compact-filter">
-            <input id="searchInput" type="text" placeholder="Search part / model / brand / requester">
-            <select id="bucketFilter"></select>
-            <select id="statusFilter"><option value="ALL">All Status</option><option value="Completed">Completed</option><option value="Partial Ordered">Partial Ordered</option><option value="Not Ordered">Not Ordered</option><option value="Over Order">Over Order</option></select>
+          <div class="planning-toolbar">
+            <select id="monthSelect"></select>
+            <input id="searchInput" type="text" placeholder="Search part / model / brand / requester...">
+            <select id="budgetFilter"></select>
+            <select id="statusFilter">
+              <option value="ALL">All Status</option>
+              <option value="Completed">Completed</option>
+              <option value="Partial Ordered">Partial Ordered</option>
+              <option value="Not Ordered">Not Ordered</option>
+              <option value="Over Order">Over Order</option>
+            </select>
             <button class="btn btn-soft" id="autoFitBudgetBtn">Auto Fit Budget</button>
-            <button class="btn btn-danger-soft" id="clearCurrentMonthBtn">Clear Month Orders</button>
+            <button class="btn btn-danger-soft" id="clearCurrentMonthBtn">Clear Month Data</button>
           </div>
-          <div class="table-wrap large"><table><thead><tr><th>No.</th><th>Budget</th><th>Part Name</th><th>CN Name</th><th>Model</th><th>Brand</th><th>Request</th><th>Order</th><th>Remain</th><th>Unit CNY</th><th>Total</th><th>Requester</th><th>Use Position</th><th>Urgency</th><th>Status</th><th>Action</th></tr></thead><tbody id="planningBody"></tbody></table></div>
+
+          <div class="tip-box">Tip: ปรับเฉพาะ Order Qty ระบบจะคำนวณยอดใช้จริง งบคงเหลือ และ Carry Forward ให้อัตโนมัติ</div>
+
+          <div class="table-wrap planning-table-wrap">
+            <table class="planning-table">
+              <thead>
+                <tr>
+                  <th>No.</th>
+                  <th>Budget</th>
+                  <th>Owner</th>
+                  <th>Department</th>
+                  <th>CN</th>
+                  <th>Part</th>
+                  <th>Model</th>
+                  <th>Brand</th>
+                  <th>Req</th>
+                  <th>Order</th>
+                  <th>Remain</th>
+                  <th>Unit</th>
+                  <th>Total</th>
+                  <th>Requester</th>
+                  <th>Use</th>
+                  <th>Urgency</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="planningBody"></tbody>
+            </table>
+          </div>
         </section>
       </section>
 
+      <!-- TRANSFER -->
       <section id="transferPage" class="page">
-        <section class="panel">
-          <div class="panel-head with-actions"><div><h3>Budget Transfer History</h3><p>ประวัติการโยกงบทั้งหมดบันทึกลง Supabase</p></div><button class="btn btn-primary" id="openTransferPageBtn">+ Transfer Budget</button></div>
-          <div class="table-wrap compact"><table><thead><tr><th>Date</th><th>From</th><th>To</th><th>Amount CNY</th><th>Amount THB</th><th>Reason</th><th>Action</th></tr></thead><tbody id="transferHistoryBody"></tbody></table></div>
-        </section>
-      </section>
+        <div class="page-title-row">
+          <div>
+            <h3>Budget Transfer</h3>
+            <p>โยกงบระหว่างก้อนงบและเก็บประวัติลง Supabase</p>
+          </div>
+          <button class="btn btn-primary" id="openTransferFromPageBtn">+ New Transfer</button>
+        </div>
 
-      <section id="carryPage" class="page">
         <section class="panel">
-          <div class="panel-head with-actions"><div><h3>Carry Forward</h3><p>รายการที่ยังสั่งไม่ครบ สามารถสร้างเป็นแผนเดือนถัดไปได้</p></div><button class="btn btn-soft" id="createNextMonthCarryBtn">Create Next Month Plan</button></div>
-          <div class="table-wrap"><table><thead><tr><th>From Month</th><th>Budget</th><th>No.</th><th>Part</th><th>Model</th><th>Brand</th><th>Request</th><th>Ordered</th><th>Remaining</th><th>Unit CNY</th><th>Estimate</th><th>Status</th></tr></thead><tbody id="carryBody"></tbody></table></div>
-        </section>
-      </section>
-
-      <section id="filePage" class="page">
-        <section class="panel">
-          <div class="panel-head"><div><h3>File Center</h3><p>นำเข้าและส่งออกไฟล์ทั้งหมดจากข้อมูล Supabase จริง</p></div></div>
-          <div class="file-action-grid">
-            <label class="file-action-card import-card"><input id="importFile" type="file" accept=".xlsx,.xls,.csv" hidden><span class="file-action-icon">↑</span><strong>Import Supplier File</strong><small>นำเข้า Excel/CSV เข้า Supabase</small></label>
-            <button class="file-action-card" id="exportOrderBtn"><span class="file-action-icon">↓</span><strong>Export Final Order</strong><small>รายการสั่งซื้อสุดท้าย</small></button>
-            <button class="file-action-card" id="exportCarryBtn"><span class="file-action-icon">↪</span><strong>Export Carry Forward</strong><small>รายการค้างสั่ง</small></button>
-            <button class="file-action-card" id="exportBudgetUsageBtn"><span class="file-action-icon">¥</span><strong>Export Budget Usage</strong><small>งบใช้ไป งบคงเหลือ โยกงบ</small></button>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Amount CNY</th>
+                  <th>Amount THB</th>
+                  <th>Reason</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="transferHistoryBody"></tbody>
+            </table>
           </div>
         </section>
-        <section class="panel"><div class="panel-head"><div><h3>Export Logs</h3><p>ประวัติการส่งออกไฟล์</p></div></div><div class="table-wrap compact"><table><thead><tr><th>Date</th><th>Month</th><th>Type</th><th>File Name</th><th>Records</th></tr></thead><tbody id="exportLogBody"></tbody></table></div></section>
       </section>
 
-      <section id="masterPage" class="page">
+      <!-- CARRY -->
+      <section id="carryPage" class="page">
+        <div class="page-title-row">
+          <div>
+            <h3>Carry Forward</h3>
+            <p>รายการที่ยังสั่งไม่ครบและต้องยกไปวางแผนเดือนถัดไป</p>
+          </div>
+          <button class="btn btn-primary" id="createNextMonthCarryBtn">Create Next Month Plan</button>
+        </div>
+
         <section class="panel">
-          <div class="panel-head with-actions"><div><h3>Master Budget Buckets</h3><p>งบหลักและงบย่อยทั้งหมดเก็บใน Supabase</p></div><button class="btn btn-primary" id="openBucketMasterBtn">+ Add Budget</button></div>
-          <div class="table-wrap compact"><table><thead><tr><th>Budget Code</th><th>Group</th><th>Owner</th><th>Department</th><th>Default Budget</th><th>Type</th><th>Status</th><th>Action</th></tr></thead><tbody id="masterBody"></tbody></table></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>From Month</th>
+                  <th>Budget</th>
+                  <th>Owner</th>
+                  <th>Department</th>
+                  <th>No.</th>
+                  <th>Part Name</th>
+                  <th>Model</th>
+                  <th>Request Qty</th>
+                  <th>Ordered Qty</th>
+                  <th>Remaining Qty</th>
+                  <th>Unit Price</th>
+                  <th>Estimated CNY</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="carryBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- FILE CENTER -->
+      <section id="filePage" class="page">
+        <div class="page-title-row">
+          <div>
+            <h3>File Center</h3>
+            <p>นำเข้าไฟล์ Supplier และส่งออกรายงานงบ/รายการสั่งซื้อจากข้อมูล Supabase</p>
+          </div>
+        </div>
+
+        <section class="panel">
+          <div class="file-action-grid">
+            <label class="file-action-card import-card">
+              <input id="importFile" type="file" accept=".xlsx,.xls,.csv" hidden>
+              <span class="file-action-icon">↑</span>
+              <strong>Import Supplier File</strong>
+              <small>นำเข้าไฟล์ Excel/CSV ลง Supabase</small>
+            </label>
+
+            <button class="file-action-card" id="exportOrderBtn">
+              <span class="file-action-icon">↓</span>
+              <strong>Export Final Order</strong>
+              <small>ส่งออกไฟล์สั่งซื้อสุดท้าย</small>
+            </button>
+
+            <button class="file-action-card" id="exportCarryBtn">
+              <span class="file-action-icon">↪</span>
+              <strong>Export Carry Forward</strong>
+              <small>ส่งออกเฉพาะรายการค้างสั่ง</small>
+            </button>
+
+            <button class="file-action-card" id="exportBudgetUsageBtn">
+              <span class="file-action-icon">¥</span>
+              <strong>Export Budget Usage Report</strong>
+              <small>รายงานงบใช้ไป งบคงเหลือ และประวัติการโยกงบ</small>
+            </button>
+          </div>
+        </section>
+      </section>
+
+      <!-- MASTER -->
+      <section id="masterPage" class="page">
+        <div class="page-title-row">
+          <div>
+            <h3>Master Data</h3>
+            <p>รายชื่อ Budget Bucket ทั้งหมดที่เก็บใน Supabase</p>
+          </div>
+          <button class="btn btn-primary" id="openBucketModalFromMasterBtn">+ Add Budget Bucket</button>
+        </div>
+
+        <section class="panel">
+          <div id="masterGrid" class="master-grid"></div>
         </section>
       </section>
     </main>
   </div>
 
-  <div class="modal-backdrop" id="manualModal"><div class="modal wide-modal"><div class="modal-head"><div><h3>Add Manual Order</h3><p>บันทึกเข้าตาราง order_plans ใน Supabase</p></div><button class="close-btn" id="closeManualModalBtn">×</button></div><form id="manualForm" class="manual-form"><label><span>Budget</span><select id="manualBucketId" required></select></label><label><span>Part Name</span><input id="manualPartName" required></label><label><span>CN Name</span><input id="manualPartNameCn"></label><label><span>Model</span><input id="manualModel"></label><label><span>Brand</span><input id="manualBrand"></label><label><span>Request Qty</span><input id="manualRequestQty" type="number" min="0" step="1" required></label><label><span>Order Qty</span><input id="manualOrderQty" type="number" min="0" step="1" required></label><label><span>Currency</span><select id="manualCurrency"><option>CNY</option><option>THB</option></select></label><label><span>Unit Price</span><input id="manualUnitPrice" type="number" min="0" step="0.01" required></label><label><span>THB to CNY Rate</span><input id="manualRate" type="number" min="0" step="0.0001" value="0.2"></label><label><span>Requester</span><input id="manualRequester"></label><label><span>Urgency</span><select id="manualUrgency"><option>Normal</option><option>Urgent</option><option>Critical</option></select></label><label class="full"><span>Use Position</span><input id="manualUsePosition"></label><label class="full"><span>Remark</span><textarea id="manualRemark"></textarea></label><div class="modal-preview full"><span>Total CNY</span><strong id="manualPreviewCny">0 CNY</strong></div><div class="modal-actions full"><button type="button" class="btn btn-white" id="clearManualFormBtn">Clear</button><button class="btn btn-primary" type="submit">Save Order</button></div></form></div></div>
+  <!-- Manual Order Modal -->
+  <div class="modal-backdrop" id="manualModal">
+    <div class="modal wide">
+      <div class="modal-head">
+        <div>
+          <h3>Add Manual Order</h3>
+          <p>เพิ่มรายการสั่งซื้อเอง เช่น ซื้อด่วน ซื้อในไทย หรือไม่มีไฟล์ Supplier</p>
+        </div>
+        <button class="close-btn" id="closeManualModalBtn">×</button>
+      </div>
 
-  <div class="modal-backdrop" id="bucketModal"><div class="modal"><div class="modal-head"><div><h3 id="bucketModalTitle">Add Budget Bucket</h3><p>เพิ่ม/แก้ไขงบย่อยใน Supabase</p></div><button class="close-btn" id="closeBucketModalBtn">×</button></div><form id="bucketForm" class="manual-form two-col"><input id="bucketId" type="hidden"><label><span>Budget Code</span><input id="bucketCode" placeholder="BUD-IVF4" required></label><label><span>Group</span><input id="bucketGroup" value="Project"></label><label><span>Owner</span><input id="bucketOwner" required></label><label><span>Department</span><input id="bucketDepartment" required></label><label><span>Default Budget CNY</span><input id="bucketDefaultBudget" type="number" min="0" step="0.01" required></label><label class="checkbox-label"><input id="bucketActive" type="checkbox" checked><span>Active</span></label><div class="modal-actions full"><button type="button" class="btn btn-white" id="clearBucketFormBtn">Clear</button><button class="btn btn-primary" type="submit">Save Budget</button></div></form></div></div>
+      <form id="manualForm" class="manual-form">
+        <label><span>Budget</span><select id="manualBucketId" required></select></label>
+        <label><span>CN Name</span><input id="manualPartNameCn" type="text"></label>
+        <label><span>Part Name</span><input id="manualPartName" type="text" required></label>
+        <label><span>Model</span><input id="manualModel" type="text"></label>
+        <label><span>Brand</span><input id="manualBrand" type="text"></label>
+        <label><span>Request Qty</span><input id="manualRequestQty" type="number" min="0" step="1" required></label>
+        <label><span>Order Qty</span><input id="manualOrderQty" type="number" min="0" step="1" required></label>
+        <label><span>Currency</span><select id="manualCurrency"><option value="CNY">CNY</option><option value="THB">THB</option></select></label>
+        <label><span>Unit Price</span><input id="manualUnitPrice" type="number" min="0" step="0.01" required></label>
+        <label><span>THB → CNY Rate</span><input id="manualRate" type="number" min="0" step="0.0001" value="0.2"></label>
+        <label><span>Requester</span><input id="manualRequester" type="text"></label>
+        <label><span>Use Position</span><input id="manualUsePosition" type="text"></label>
+        <label><span>Urgency</span><select id="manualUrgency"><option>Normal</option><option>Urgent</option><option>Critical</option></select></label>
+        <label><span>Delivery</span><input id="manualDelivery" type="text"></label>
+        <label class="full"><span>Remark</span><textarea id="manualRemark" rows="3"></textarea></label>
 
-  <div class="modal-backdrop" id="transferModal"><div class="modal small-modal"><div class="modal-head"><div><h3>Transfer Budget</h3><p>โยกงบและบันทึกประวัติใน Supabase</p></div><button class="close-btn" id="closeTransferModalBtn">×</button></div><form id="transferForm" class="manual-form two-col"><label><span>From Budget</span><select id="transferFrom" required></select></label><label><span>To Budget</span><select id="transferTo" required></select></label><label><span>Amount CNY</span><input id="transferAmount" type="number" min="0" step="0.01" required></label><label><span>Amount THB</span><input id="transferAmountThb" readonly></label><label class="full"><span>Reason</span><textarea id="transferReason"></textarea></label><div class="modal-actions full"><button type="button" class="btn btn-white" id="clearTransferFormBtn">Clear</button><button class="btn btn-primary" type="submit">Save Transfer</button></div></form></div></div>
+        <div class="modal-preview full">
+          <div><span>Total Original</span><strong id="manualPreviewAmount">0.00 CNY</strong></div>
+          <div><span>Total CNY</span><strong id="manualPreviewCny">0.00 CNY</strong></div>
+        </div>
+
+        <div class="modal-actions full">
+          <button type="button" class="btn btn-white" id="clearManualFormBtn">Clear</button>
+          <button type="submit" class="btn btn-primary">Save Order</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Transfer Modal -->
+  <div class="modal-backdrop" id="transferModal">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3>Transfer Budget</h3>
+          <p>โยกงบระหว่าง Budget Bucket และบันทึกลง Supabase</p>
+        </div>
+        <button class="close-btn" id="closeTransferModalBtn">×</button>
+      </div>
+
+      <form id="transferForm" class="transfer-form">
+        <label><span>From Budget</span><select id="transferFrom" required></select></label>
+        <label><span>To Budget</span><select id="transferTo" required></select></label>
+        <label><span>Amount CNY</span><input id="transferAmount" type="number" min="0" step="0.01" required></label>
+        <label><span>Amount THB</span><input id="transferAmountThb" type="text" readonly></label>
+        <label class="full"><span>Reason</span><textarea id="transferReason" rows="3" required></textarea></label>
+
+        <div class="modal-actions full">
+          <button type="button" class="btn btn-white" id="clearTransferFormBtn">Clear</button>
+          <button type="submit" class="btn btn-primary">Save Transfer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Budget Bucket Modal -->
+  <div class="modal-backdrop" id="bucketModal">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="bucketModalTitle">Add Budget Bucket</h3>
+          <p>เพิ่ม/แก้ไขงบย่อยใน Supabase และอัปเดตงบเดือนที่เลือกทันที</p>
+        </div>
+        <button class="close-btn" id="closeBucketModalBtn">×</button>
+      </div>
+
+      <form id="bucketForm" class="bucket-form">
+        <input id="bucketId" type="hidden">
+        <label><span>Budget Code</span><input id="bucketCode" type="text" required placeholder="BUD-IVF4"></label>
+        <label><span>Group</span><input id="bucketGroup" type="text" required placeholder="Department / Project / Emergency"></label>
+        <label><span>Owner</span><input id="bucketOwner" type="text" required></label>
+        <label><span>Department</span><input id="bucketDepartment" type="text" required></label>
+        <label><span>Default Budget CNY</span><input id="bucketDefaultBudget" type="number" min="0" step="0.01" required></label>
+        <label class="checkbox-label"><input id="bucketActive" type="checkbox" checked><span>Active</span></label>
+
+        <div class="modal-actions full">
+          <button type="button" class="btn btn-white" id="clearBucketFormBtn">Clear</button>
+          <button type="submit" class="btn btn-primary">Save Budget</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <script src="script.js"></script>
 </body>
