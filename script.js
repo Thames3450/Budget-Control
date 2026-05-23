@@ -147,6 +147,7 @@ function bindEvents() {
 
   $('recalcRolloverBtn').addEventListener('click', recalculateRollover);
   $('resetMonthBtn').addEventListener('click', resetSelectedMonth);
+  $('createNextMonthBtn').addEventListener('click', createNextMonthWithRollover);
   $('createNextMonthCarryBtn').addEventListener('click', createNextMonthFromCarry);
 
   $('importFile').addEventListener('change', handleImportFile);
@@ -286,51 +287,83 @@ function badgeClass(status) {
 }
 function getPreviousRemaining(month, bucketId) {
   const prev = previousMonth(month);
-  return Math.max(calcBudget(prev, bucketId).remaining, 0);
+  const previousSummary = calcBudget(prev, bucketId);
+  return Math.max(previousSummary.remaining, 0);
 }
 function calcBudget(month, bucketId) {
   const allocation = allocations.find(a => a.month === month && a.bucket_id === bucketId && a.is_active !== false);
   const base = num(allocation?.base_budget);
   const rollover = num(allocation?.rollover_in);
+
   const transferIn = transfers
     .filter(t => t.month === month && t.to_bucket_id === bucketId)
-    .reduce((s, t) => s + num(t.amount_cny), 0);
+    .reduce((sum, t) => sum + num(t.amount_cny), 0);
+
   const transferOut = transfers
     .filter(t => t.month === month && t.from_bucket_id === bucketId)
-    .reduce((s, t) => s + num(t.amount_cny), 0);
+    .reduce((sum, t) => sum + num(t.amount_cny), 0);
+
   const total = base + rollover + transferIn - transferOut;
+
   const used = plans
     .filter(p => p.month === month && p.bucket_id === bucketId)
-    .reduce((s, p) => s + planTotal(p), 0);
+    .reduce((sum, p) => sum + planTotal(p), 0);
+
   const remaining = total - used;
   const usage = total > 0 ? (used / total) * 100 : 0;
 
-  let status = 'Normal';
-  let level = 'normal';
-  let message = 'งบยังเพียงพอ';
+  let status = "Normal";
+  let level = "normal";
+  let message = "งบยังเพียงพอ";
+
   if (remaining < 0) {
-    status = 'Over Budget'; level = 'danger'; message = `เกินงบ ${formatCNY(Math.abs(remaining))}`;
+    status = "Over Budget";
+    level = "danger";
+    message = `เกินงบ ${formatCNY(Math.abs(remaining))}`;
   } else if (usage >= 90) {
-    status = 'Almost Empty'; level = 'danger'; message = 'งบใกล้หมดมาก ควรตรวจสอบ';
+    status = "Almost Empty";
+    level = "danger";
+    message = "งบใกล้หมดมาก ควรตรวจสอบ";
   } else if (usage >= 75) {
-    status = 'Warning'; level = 'warning'; message = 'ใช้งบเกิน 75% แล้ว';
+    status = "Warning";
+    level = "warning";
+    message = "ใช้งบเกิน 75% แล้ว";
   }
+
   return { base, rollover, transferIn, transferOut, total, used, remaining, usage, status, level, message };
 }
 function calcMonth(month = selectedMonth) {
   const rows = allocationRows(month);
-  let total = 0, used = 0;
-  rows.forEach(a => {
-    const s = calcBudget(month, a.bucket_id);
-    total += s.total;
-    used += s.used;
+  let total = 0;
+  let used = 0;
+
+  rows.forEach(allocation => {
+    const summary = calcBudget(month, allocation.bucket_id);
+    total += summary.total;
+    used += summary.used;
   });
+
   const remaining = total - used;
   const usage = total > 0 ? (used / total) * 100 : 0;
-  let status = 'Normal', level = 'normal', message = 'งบยังเพียงพอ';
-  if (remaining < 0) { status = 'Over Budget'; level = 'danger'; message = `เกินงบ ${formatCNY(Math.abs(remaining))}`; }
-  else if (usage >= 90) { status = 'Almost Empty'; level = 'danger'; message = 'งบใกล้หมดมาก'; }
-  else if (usage >= 75) { status = 'Warning'; level = 'warning'; message = 'ใช้งบเกิน 75% แล้ว'; }
+
+  let status = "Normal";
+  let level = "normal";
+  let message = "งบยังเพียงพอ";
+
+  if (remaining < 0) {
+    status = "Over Budget";
+    level = "danger";
+    message = `เกินงบ ${formatCNY(Math.abs(remaining))}`;
+  } else if (usage >= 90) {
+    status = "Almost Empty";
+    level = "danger";
+    message = "งบใกล้หมดมาก";
+  } else if (usage >= 75) {
+    status = "Warning";
+    level = "warning";
+    message = "ใช้งบเกิน 75% แล้ว";
+  }
+
   return { total, used, remaining, usage, status, level, message, bucketCount: rows.length };
 }
 function sumAllocationBase(month = selectedMonth) {
@@ -350,30 +383,37 @@ async function syncMonthBaseTotal(month = selectedMonth) {
 
 /* Supabase month / allocations */
 async function ensureMonth(month, useRollover = true) {
-  const existing = months.find(m => m.month === month);
+  const existingMonth = months.find(m => m.month === month);
 
-  if (!existing) {
+  if (!existingMonth) {
     const totalDefault = activeBuckets().reduce((sum, b) => sum + num(b.default_budget), 0);
+
     await supa(
       sb.from(TABLES.months)
-        .upsert({ month, base_total: totalDefault, cny_to_thb_rate: cnyToThbRate }, { onConflict: 'month' })
+        .upsert({
+          month,
+          base_total: totalDefault,
+          cny_to_thb_rate: cnyToThbRate
+        }, { onConflict: "month" })
         .select()
     );
+
     await loadAllData();
   }
 
-  const existingIds = new Set(
+  const existingAllocationBucketIds = new Set(
     allocations.filter(a => a.month === month).map(a => a.bucket_id)
   );
 
   const inserts = [];
-  activeBuckets().forEach(b => {
-    if (!existingIds.has(b.id)) {
+
+  activeBuckets().forEach(bucket => {
+    if (!existingAllocationBucketIds.has(bucket.id)) {
       inserts.push({
         month,
-        bucket_id: b.id,
-        base_budget: num(b.default_budget),
-        rollover_in: useRollover ? getPreviousRemaining(month, b.id) : 0,
+        bucket_id: bucket.id,
+        base_budget: num(bucket.default_budget),
+        rollover_in: useRollover ? getPreviousRemaining(month, bucket.id) : 0,
         is_active: true
       });
     }
@@ -390,33 +430,36 @@ async function ensureMonth(month, useRollover = true) {
 async function handleCreateMonth(e) {
   e.preventDefault();
   showLoading(true);
-  try {
-    const month = $('monthInput').value;
-    selectedMonth = month;
-    localStorage.setItem('mpr_budget_selected_month', month);
-    cnyToThbRate = clean($('cnyToThbInput').value) || 5;
 
-    await supa(
-      sb.from(TABLES.months)
-        .upsert({
-          month,
-          cny_to_thb_rate: cnyToThbRate,
-          base_total: sumAllocationBase(month) || activeBuckets().reduce((sum, b) => sum + num(b.default_budget), 0)
-        }, { onConflict: 'month' })
-        .select()
-    );
+  try {
+    const month = $("monthInput").value;
+    const useRollover = $("rolloverToggle").checked;
+
+    selectedMonth = month;
+    localStorage.setItem("mpr_budget_selected_month", month);
+
+    cnyToThbRate = clean($("cnyToThbInput").value) || 5;
+
+    const existingMonth = months.find(m => m.month === month);
+
+    if (!existingMonth) {
+      const defaultTotal = activeBuckets().reduce((sum, b) => sum + num(b.default_budget), 0);
+      await supa(sb.from(TABLES.months).insert({ month, base_total: defaultTotal, cny_to_thb_rate: cnyToThbRate }).select());
+    } else {
+      await supa(sb.from(TABLES.months).update({ cny_to_thb_rate: cnyToThbRate }).eq("month", month).select());
+    }
 
     await loadAllData();
-    await ensureMonth(month, $('rolloverToggle').checked);
+    await ensureMonth(month, useRollover);
 
-    if ($('rolloverToggle').checked) {
+    if (useRollover) {
       await loadAllData();
       const rows = allocationRows(month);
-      for (const a of rows) {
+      for (const allocation of rows) {
         await supa(
           sb.from(TABLES.allocations)
-            .update({ rollover_in: getPreviousRemaining(month, a.bucket_id) })
-            .eq('id', a.id)
+            .update({ rollover_in: getPreviousRemaining(month, allocation.bucket_id) })
+            .eq("id", allocation.id)
             .select()
         );
       }
@@ -425,10 +468,11 @@ async function handleCreateMonth(e) {
     await loadAllData();
     await syncMonthBaseTotal(month);
     await refresh();
-    toast('สร้าง/อัปเดตงบเดือนเรียบร้อย', 'success');
+
+    toast("สร้าง/อัปเดตเดือนเรียบร้อย ข้อมูลแยกเดือนแล้ว", "success");
   } catch (err) {
     console.error(err);
-    toast(err.message, 'error');
+    toast(err.message, "error");
   } finally {
     showLoading(false);
   }
@@ -461,21 +505,21 @@ async function recalculateRollover() {
   showLoading(true);
   try {
     const rows = allocationRows(selectedMonth);
-    for (const a of rows) {
+    for (const allocation of rows) {
       await supa(
         sb.from(TABLES.allocations)
-          .update({ rollover_in: getPreviousRemaining(selectedMonth, a.bucket_id) })
-          .eq('id', a.id)
+          .update({ rollover_in: getPreviousRemaining(selectedMonth, allocation.bucket_id) })
+          .eq("id", allocation.id)
           .select()
       );
     }
     await loadAllData();
     await syncMonthBaseTotal(selectedMonth);
     await refresh();
-    toast('คำนวณ Rollover ใหม่แล้ว', 'success');
+    toast("คำนวณ Rollover ใหม่จากเดือนก่อนแล้ว", "success");
   } catch (err) {
     console.error(err);
-    toast(err.message, 'error');
+    toast(err.message, "error");
   } finally {
     showLoading(false);
   }
@@ -1203,52 +1247,94 @@ function renderCarryForward() {
 }
 async function createNextMonthFromCarry() {
   const carry = monthPlans(selectedMonth).filter(p => remainQty(p) > 0);
-  if (!carry.length) return toast('ไม่มีรายการ Carry Forward', 'error');
+
+  if (!carry.length) {
+    toast("ไม่มีรายการ Carry Forward", "error");
+    return;
+  }
 
   const newMonth = nextMonth(selectedMonth);
   showLoading(true);
+
   try {
     await ensureMonth(newMonth, true);
     await loadAllData();
 
     let no = monthPlans(newMonth).length + 1;
-    const newPlans = carry.map(p => ({
-      month: newMonth,
-      bucket_id: p.bucket_id,
-      budget_code: p.budget_code,
-      budget_owner: p.budget_owner,
-      department: p.department,
-      no: String(no++),
-      remark: `Carry forward from ${selectedMonth}`,
-      part_name_cn: p.part_name_cn,
-      part_name: p.part_name,
-      model: p.model,
-      brand: p.brand,
-      request_qty: remainQty(p),
-      order_qty: remainQty(p),
-      currency: p.currency,
-      unit_price_original: p.unit_price_original,
-      rate_to_cny: p.rate_to_cny,
-      unit_price_cny: p.unit_price_cny,
-      requester: p.requester,
-      use_position: p.use_position,
-      urgency: p.urgency,
-      delivery_date: p.delivery_date,
-      planned_delivery: p.planned_delivery,
-      source_file: 'Carry Forward',
-      source_type: 'Carry Forward',
-      source_carry_id: p.id
-    }));
+    const existingCarryIds = new Set(monthPlans(newMonth).map(p => p.source_carry_id).filter(Boolean));
 
-    await supa(sb.from(TABLES.plans).insert(newPlans).select());
+    const newPlans = carry
+      .filter(p => !existingCarryIds.has(p.id))
+      .map(p => ({
+        month: newMonth,
+        bucket_id: p.bucket_id,
+        budget_code: p.budget_code,
+        budget_owner: p.budget_owner,
+        department: p.department,
+        no: String(no++),
+        remark: `Carry forward from ${selectedMonth}`,
+        part_name_cn: p.part_name_cn,
+        part_name: p.part_name,
+        model: p.model,
+        brand: p.brand,
+        request_qty: remainQty(p),
+        order_qty: remainQty(p),
+        currency: p.currency,
+        unit_price_original: p.unit_price_original,
+        rate_to_cny: p.rate_to_cny,
+        unit_price_cny: p.unit_price_cny,
+        requester: p.requester,
+        use_position: p.use_position,
+        urgency: p.urgency,
+        delivery_date: p.delivery_date,
+        planned_delivery: p.planned_delivery,
+        source_file: "Carry Forward",
+        source_type: "Carry Forward",
+        source_carry_id: p.id
+      }));
+
+    if (newPlans.length) {
+      await supa(sb.from(TABLES.plans).insert(newPlans).select());
+    }
+
     selectedMonth = newMonth;
-    localStorage.setItem('mpr_budget_selected_month', selectedMonth);
+    localStorage.setItem("mpr_budget_selected_month", selectedMonth);
+
     await loadAllData();
     await refresh();
-    toast(`สร้างแผนเดือน ${newMonth} จาก Carry Forward แล้ว`, 'success');
+
+    toast(`สร้างเดือน ${newMonth} พร้อม Rollover และ Carry Forward แล้ว`, "success");
   } catch (err) {
     console.error(err);
-    toast(err.message, 'error');
+    toast(err.message, "error");
+  } finally {
+    showLoading(false);
+  }
+}
+
+
+async function createNextMonthWithRollover() {
+  const current = selectedMonth;
+  const newMonth = nextMonth(current);
+
+  if (!confirm(`สร้างเดือน ${newMonth} และทบยอดคงเหลือจาก ${current} หรือไม่?`)) return;
+
+  showLoading(true);
+
+  try {
+    selectedMonth = newMonth;
+    localStorage.setItem("mpr_budget_selected_month", selectedMonth);
+
+    await loadAllData();
+    await ensureMonth(newMonth, true);
+    await loadAllData();
+    await syncMonthBaseTotal(newMonth);
+    await refresh();
+
+    toast(`สร้างเดือน ${newMonth} พร้อมทบยอดคงเหลือแล้ว`, "success");
+  } catch (err) {
+    console.error(err);
+    toast(err.message, "error");
   } finally {
     showLoading(false);
   }
